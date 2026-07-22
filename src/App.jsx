@@ -12,6 +12,7 @@ export default function App() {
   const [count, setCount] = useState(20)
   const [speed, setSpeed] = useState(70)
   const [humanFactor, setHumanFactor] = useState(40) // shown as a percentage
+  const [urgency, setUrgency] = useState(65)          // pursuit of a screened spot
   const [showLines, setShowLines] = useState(false)
   const [running, setRunning] = useState(true)
 
@@ -69,6 +70,9 @@ export default function App() {
   useEffect(() => {
     if (simRef.current) simRef.current.params.humanFactor = humanFactor / 100
   }, [humanFactor])
+  useEffect(() => {
+    if (simRef.current) simRef.current.params.urgency = urgency / 100
+  }, [urgency])
 
   // Click / tap a person to flip just their sightlines.
   const onCanvasClick = useCallback((e) => {
@@ -117,6 +121,9 @@ export default function App() {
           <Control label="Human factor" value={humanFactor} set={setHumanFactor}
             min={0} max={100} suffix="%" ends={['robotic', 'human']}
             hint="One knob, robotic to human. Up adds slower reactions, misjudged positions, momentum, a limited turn rate, path wobble, and occasional real collisions — while sharpening anticipation, open-space seeking, and edge awareness." />
+          <Control label="Screening urgency" value={urgency} set={setUrgency}
+            min={0} max={100} suffix="%" ends={['relaxed', 'urgent']}
+            hint="How hard people push to get behind their protector, over the comfort urges (spacing, edges, open space)." />
         </div>
 
         <div className="buttons">

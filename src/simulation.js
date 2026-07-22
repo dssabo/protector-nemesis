@@ -57,6 +57,8 @@ export class Simulation {
       count: 20,
       speed: 70,        // px/s — a person's comfortable top speed
       humanFactor: 0.4, // 0 = crisp robot, 1 = laggy, imperfect human
+      urgency: 0.65,    // 0 = screening is just one urge among many; 1 = get
+                        // screened above all else (overriding the comfort urges)
     }
     this.reset()
   }
@@ -188,6 +190,20 @@ export class Simulation {
     const maxSpeed = this.params.speed
     const maxAccel = maxSpeed / t.accelTime
     const agents = this.agents
+    // How hard people pursue a screened spot vs. the comfort urges (spacing,
+    // open space). Urgency does two things at once: it boosts the pull toward
+    // the line, AND makes the comfort urges yield — so a determined person
+    // presses for the line even through a crowd, tolerating less personal space
+    // and less roominess, instead of weighing everything equally.
+    const urgency = clamp(this.params.urgency, 0, 1)
+    const seekGain = lerp(0.8, 2.2, urgency)
+    const comfortScale = lerp(1.15, 0.5, urgency)
+    // How sharply people cut toward the line. Low urgency = a lazy wide arc at
+    // arm's length; high urgency = a big turn that cuts more directly across to
+    // get behind the protector right now (accepting a closer, more assertive
+    // move). This is the knob that trades the earlier "don't crowd in" arc for
+    // decisive pursuit.
+    const maxStep = lerp(0.45, 2.2, urgency)
 
     // --- 1. Perception & attention -----------------------------------------
     for (const a of agents) {
@@ -248,15 +264,18 @@ export class Simulation {
           let dAng = angT - angA
           while (dAng > Math.PI) dAng -= TAU
           while (dAng < -Math.PI) dAng += TAU
-          // Aim only part-way around the circle so the pull is tangential (an
-          // arc), not a chord that would cut in through the protector.
-          const stepAng = angA + clamp(dAng, -0.7, 0.7)
+          // Aim part-way around the circle toward the safe bearing. How far is
+          // set by urgency: a small step is a gentle tangent (wide arc), a big
+          // step cuts more directly across toward the line.
+          const stepAng = angA + clamp(dAng, -maxStep, maxStep)
           const tx = a.perc.px + Math.cos(stepAng) * keepR
           const ty = a.perc.py + Math.sin(stepAng) * keepR
           const dx = tx - a.x, dy = ty - a.y
           const d = Math.hypot(dx, dy)
           if (d > 1e-3) {
-            const desiredSpeed = maxSpeed * clamp(d / 55, 0, 1) // ease in near the target
+            // Ease in near the target, but scale the whole pull by urgency so a
+            // determined person pushes for the line even through a crowd.
+            const desiredSpeed = maxSpeed * seekGain * clamp(d / 55, 0, 1)
             sx = dx / d * desiredSpeed
             sy = dy / d * desiredSpeed
           }
@@ -287,10 +306,10 @@ export class Simulation {
             openy += dy / d * w
           }
         }
-        sepx *= maxSpeed * sepWeight
-        sepy *= maxSpeed * sepWeight
-        openx *= maxSpeed * openWeight * t.openSpace
-        openy *= maxSpeed * openWeight * t.openSpace
+        sepx *= maxSpeed * sepWeight * comfortScale
+        sepy *= maxSpeed * sepWeight * comfortScale
+        openx *= maxSpeed * openWeight * t.openSpace * comfortScale
+        openy *= maxSpeed * openWeight * t.openSpace * comfortScale
       }
 
       // Soft field edge — no fence, people just ease back toward the middle.

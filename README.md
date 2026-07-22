@@ -22,6 +22,10 @@ point — and the exercise.
   rate, path wobble, and occasional real collisions — while sharpening the
   things people do well: anticipating where their targets are heading, drifting
   toward open space, and keeping clear of the field edges.
+- **Screening urgency** — how hard people push to get behind their protector
+  versus the comfort urges (personal space, edges, open space). Relaxed: lazy
+  wide arcs at arm's length, in no hurry to line up. Urgent: they cut directly
+  across to get screened, tolerating a tighter, more assertive crowd.
 - **Show all sightlines** — draws each person's line to their protector (blue)
   and nemesis (orange). It's a master switch that resets everyone.
 - **Click any person** — toggles just that person's sightlines, on top of the
