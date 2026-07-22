@@ -116,7 +116,7 @@ export default function App() {
           <Control label="Speed" value={speed} set={setSpeed} min={15} max={200} />
           <Control label="Human factor" value={humanFactor} set={setHumanFactor}
             min={0} max={100} suffix="%" ends={['robotic', 'human']}
-            hint="One knob, robotic to human, that turns several imperfections up together: slower reactions (you check the field less often), misjudged positions, momentum so you overshoot, a limited turn rate so you can't pivot on a dime, a little path wobble, and the occasional real collision when attention lapses. It also sharpens what people do well — anticipating where their protector and nemesis are heading, drifting toward open space, and keeping clear of the field edges." />
+            hint="One knob, robotic to human. Up adds slower reactions, misjudged positions, momentum, a limited turn rate, path wobble, and occasional real collisions — while sharpening anticipation, open-space seeking, and edge awareness." />
         </div>
 
         <div className="buttons">
