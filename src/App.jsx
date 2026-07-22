@@ -105,8 +105,9 @@ export default function App() {
           <h1>Protector <span>&amp;</span> Nemesis</h1>
           <p className="tagline">
             Everyone secretly picks a <b className="prot">protector</b> and a
-            {' '}<b className="nem">nemesis</b>, then tries to keep the protector
-            {' '}on the line between themselves and their nemesis.
+            {' '}<b className="nem">nemesis</b>, then <b>moves themselves</b> to keep
+            {' '}their protector on the line between themselves and their nemesis —
+            {' '}a living shield. Everyone moves at once, so the crowd never settles.
           </p>
         </header>
 
@@ -115,7 +116,7 @@ export default function App() {
           <Control label="Speed" value={speed} set={setSpeed} min={15} max={200} />
           <Control label="Human factor" value={humanFactor} set={setHumanFactor}
             min={0} max={100} suffix="%" ends={['robotic', 'human']}
-            hint="Higher = slower reactions, misjudged positions, momentum, wobble, the occasional real collision — but also more anticipation of where targets are heading." />
+            hint="One knob, robotic to human, that turns several imperfections up together: slower reactions (you check the field less often), misjudged positions, momentum so you overshoot, a limited turn rate so you can't pivot on a dime, a little path wobble, and the occasional real collision when attention lapses. It also sharpens what people do well — anticipating where their protector and nemesis are heading, drifting toward open space, and keeping clear of the field edges." />
         </div>
 
         <div className="buttons">
