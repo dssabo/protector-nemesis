@@ -95,6 +95,7 @@ export default function App() {
   }
 
   const scatter = () => simRef.current && simRef.current.scatter()
+  const circle = () => simRef.current && simRef.current.formCircle()
   const reroll = () => simRef.current && simRef.current.assign()
 
   return (
@@ -114,7 +115,7 @@ export default function App() {
           <Control label="Speed" value={speed} set={setSpeed} min={15} max={200} />
           <Control label="Human factor" value={humanFactor} set={setHumanFactor}
             min={0} max={100} suffix="%" ends={['robotic', 'human']}
-            hint="Higher = slower reactions, misjudged positions, momentum, wobble, and the occasional real collision." />
+            hint="Higher = slower reactions, misjudged positions, momentum, wobble, the occasional real collision — but also more anticipation of where targets are heading." />
         </div>
 
         <div className="buttons">
@@ -126,6 +127,7 @@ export default function App() {
               {running ? 'Pause' : 'Play'}
             </button>
             <button onClick={scatter}>Scatter</button>
+            <button onClick={circle}>Circle</button>
             <button onClick={reroll}>New targets</button>
           </div>
           <p className="hint tap-hint">Tip: click any person to toggle just their sightlines.</p>
@@ -176,9 +178,10 @@ function draw(canvas, sim, showLines) {
   const ctx = canvas.getContext('2d')
   const w = sim.width, h = sim.height
 
-  // Field — plain white for maximum contrast with the dots and sightlines.
+  // Field — a soft dark slate (not pure black) so the bright dots and the
+  // blue/orange sightlines pop without glare.
   ctx.clearRect(0, 0, w, h)
-  ctx.fillStyle = '#ffffff'
+  ctx.fillStyle = '#141a23'
   ctx.fillRect(0, 0, w, h)
 
   const agents = sim.agents
@@ -218,17 +221,17 @@ function draw(canvas, sim, showLines) {
     ctx.arc(a.x, a.y, r, 0, Math.PI * 2)
     ctx.fillStyle = a.color
     ctx.fill()
-    ctx.lineWidth = 2
-    ctx.strokeStyle = 'rgba(0,0,0,0.28)'
+    ctx.lineWidth = 1.5
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)'
     ctx.stroke()
 
-    // ring on anyone whose sightlines are individually shown — dark so it
-    // stands out against the white field
+    // ring on anyone whose sightlines are individually shown — light so it
+    // stands out against the dark field
     if (sim.linesVisible(a, showLines)) {
       ctx.beginPath()
       ctx.arc(a.x, a.y, r + 4, 0, Math.PI * 2)
       ctx.lineWidth = 2.5
-      ctx.strokeStyle = 'rgba(20,24,30,0.9)'
+      ctx.strokeStyle = 'rgba(255,255,255,0.92)'
       ctx.stroke()
     }
   }

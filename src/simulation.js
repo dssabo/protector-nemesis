@@ -14,30 +14,26 @@ const TAU = Math.PI * 2
 
 export const AGENT_RADIUS = 9
 
-// How far ahead people "read" a target's motion. Humans don't chase where you
-// ARE, they head for where you're GOING — so each person aims at the line as it
-// will be a fraction of a second from now, not as it is this instant.
-const LEAD_TIME = 0.4 // seconds of anticipation
-
 // Decorative dot colors — they carry NO meaning (protector/nemesis are secret
 // and shown only by the sightlines). They exist purely so you can tell
 // neighbours apart at a glance. There are only this many, so with a big crowd
-// they necessarily repeat; to actually follow one person, click them.
-// Chosen to spread across hue AND lightness so they stay distinguishable to
-// colour-blind eyes rather than relying on a red/green split.
+// they necessarily repeat; to actually follow one person, click them. Chosen
+// bright so they pop against the dark field, and spread across hue AND lightness
+// so they stay distinguishable to colour-blind eyes rather than relying on a
+// red/green split.
 const COLORS = [
-  '#264653', // dark slate
-  '#2a9d8f', // teal
-  '#e9c46a', // sand
-  '#f4a261', // apricot
-  '#e76f51', // coral
-  '#5c4d7d', // indigo
-  '#457b9d', // steel
-  '#e07be0', // orchid
-  '#8ab17d', // sage
-  '#b5838d', // mauve
-  '#3d5a80', // navy
-  '#ee9b00', // amber
+  '#74c0fc', // sky blue
+  '#ffd43b', // yellow
+  '#ff922b', // orange
+  '#da77f2', // purple
+  '#3bc9db', // cyan
+  '#ff8787', // salmon
+  '#a9e34b', // lime
+  '#f783ac', // pink
+  '#63e6be', // teal
+  '#ffa94d', // amber
+  '#9775fa', // violet
+  '#e9ecef', // pale grey
 ]
 
 function rand(min, max) { return min + Math.random() * (max - min) }
@@ -84,15 +80,15 @@ export class Simulation {
     }
   }
 
-  // (Re)build the crowd: scatter positions and hand out fresh assignments.
+  // (Re)build the crowd, hand out fresh assignments, and stand everyone in an
+  // evenly-spaced starting circle.
   reset() {
     const n = clamp(Math.round(this.params.count), 2, 120)
     const agents = []
     for (let i = 0; i < n; i++) {
       agents.push({
         id: i,
-        x: rand(AGENT_RADIUS, this.width - AGENT_RADIUS),
-        y: rand(AGENT_RADIUS, this.height - AGENT_RADIUS),
+        x: 0, y: 0,           // real positions come from formCircle() below
         vx: 0, vy: 0,
         heading: rand(0, TAU),
         color: COLORS[i % COLORS.length],
@@ -106,10 +102,30 @@ export class Simulation {
     }
     this.agents = agents
     this.assign()
-    for (const a of agents) this.refreshPerception(a, 0)
+    this.formCircle()
   }
 
-  // Re-scatter everyone but keep their current protector/nemesis choices.
+  // Stand everyone in an evenly-spaced ring in the middle of the field. The
+  // ring's size grows with the crowd so people stay decently spaced, but it's
+  // capped to fit inside the field. Keeps current protector/nemesis choices.
+  formCircle() {
+    const n = this.agents.length
+    const cx = this.width / 2, cy = this.height / 2
+    const spacing = AGENT_RADIUS * 6                 // desired gap between neighbours
+    const fit = Math.min(this.width, this.height) / 2 - AGENT_RADIUS - 14
+    const radius = n > 1 ? clamp((n * spacing) / TAU, AGENT_RADIUS * 4, fit) : 0
+    for (let i = 0; i < n; i++) {
+      const ang = (i / n) * TAU
+      const a = this.agents[i]
+      a.x = cx + Math.cos(ang) * radius
+      a.y = cy + Math.sin(ang) * radius
+      a.vx = a.vy = 0
+      a.distract = 0
+      this.refreshPerception(a, 0)
+    }
+  }
+
+  // Re-scatter everyone at random but keep their current protector/nemesis choices.
   scatter() {
     for (const a of this.agents) {
       a.x = rand(AGENT_RADIUS, this.width - AGENT_RADIUS)
@@ -142,17 +158,20 @@ export class Simulation {
 
   // Refresh an agent's remembered view of where its protector & nemesis are,
   // optionally with some misjudgement (noise) baked in. This also bakes in
-  // ANTICIPATION: rather than the target's current spot we take where it will
-  // be LEAD_TIME from now, projected from its current velocity. That's what
-  // lets people flow into position (and cut smooth arcs) instead of forever
-  // reacting to stale positions.
+  // ANTICIPATION: rather than a target's current spot we take where it will be
+  // a short time from now, projected from its current velocity. Anticipation is
+  // a HUMAN skill here — a crisp robot (human factor 0) tracks exact current
+  // positions with no lead, while a human reads direction of travel and leads
+  // their targets, which is what lets them flow into position and cut smooth
+  // arcs instead of forever reacting to where people just were.
   refreshPerception(a, noise) {
+    const lead = lerp(0, 0.55, clamp(this.params.humanFactor, 0, 1))
     const p = this.agents[a.protector]
     const n = this.agents[a.nemesis]
-    a.perc.px = p.x + p.vx * LEAD_TIME + (noise ? gauss(noise) : 0)
-    a.perc.py = p.y + p.vy * LEAD_TIME + (noise ? gauss(noise) : 0)
-    a.perc.nx = n.x + n.vx * LEAD_TIME + (noise ? gauss(noise) : 0)
-    a.perc.ny = n.y + n.vy * LEAD_TIME + (noise ? gauss(noise) : 0)
+    a.perc.px = p.x + p.vx * lead + (noise ? gauss(noise) : 0)
+    a.perc.py = p.y + p.vy * lead + (noise ? gauss(noise) : 0)
+    a.perc.nx = n.x + n.vx * lead + (noise ? gauss(noise) : 0)
+    a.perc.ny = n.y + n.vy * lead + (noise ? gauss(noise) : 0)
   }
 
   // Whether an agent's sightlines should be drawn, given the global toggle.
@@ -185,39 +204,54 @@ export class Simulation {
     }
 
     // --- 2. Steering -------------------------------------------------------
-    const sepRadius = AGENT_RADIUS * 5.5   // "personal space" — kept wide so
-    const sepWeight = 2.4                   // people actively seek open ground
-    const screenTol = AGENT_RADIUS * 1.6   // "close enough" to the line to stop
+    const sepRadius = AGENT_RADIUS * 6.0   // "personal space" — kept wide so
+    const sepWeight = 2.6                   // people actively seek open ground
+    const screenTol = AGENT_RADIUS * 2.4   // sideways slack that still counts as screened
     const margin = 70                      // soft edge starts this far in
 
     for (const a of agents) {
-      // Seek: the goal is only a clear SIGHTLINE, not closeness. The set of
-      // valid spots is the whole ray that starts behind the protector and
-      // points away from the nemesis. We aim at the *nearest* point on that
-      // ray, so a person already well-screened barely moves and is happy to
-      // stay far from their protector.
+      // Seek: the only goal is a clear SIGHTLINE — get the protector onto the
+      // line between you and your nemesis. Two human instincts shape HOW:
+      //   1. If you're already screened, you're happy — you don't inch closer,
+      //      you just hold your ground (at ANY distance).
+      //   2. If you're not screened, you don't dive toward your protector; you
+      //      keep your distance and ARC AROUND to get behind them.
+      // So we never steer inward. We find where the agent stands on the circle
+      // around the protector, and aim at a point a little way around that same
+      // circle toward the "safe" bearing (behind the protector, away from the
+      // nemesis) — a sideways, orbiting move rather than a closing one.
       let sx = 0, sy = 0
-      let ux = a.perc.px - a.perc.nx
+      let ux = a.perc.px - a.perc.nx    // "safe" direction: from nemesis toward protector
       let uy = a.perc.py - a.perc.ny
       const ulen = Math.hypot(ux, uy)
       if (ulen > 1e-3) {
         ux /= ulen; uy /= ulen
-        const tmin = AGENT_RADIUS * 1.5 // stay at least just behind the protector
-        let tproj = (a.x - a.perc.px) * ux + (a.y - a.perc.py) * uy
-        if (tproj < tmin) tproj = tmin
-        const tx = a.perc.px + ux * tproj
-        const ty = a.perc.py + uy * tproj
-        const dx = tx - a.x, dy = ty - a.y
-        const d = Math.hypot(dx, dy)
-        // Deadband: once you're within screenTol of the ideal line you're
-        // already screened, so stop steering toward it. This is what stops
-        // people from needlessly creeping in toward their protector — a person
-        // who's covered is content to hold position (or drift on open ground),
-        // and only the separation force nudges them around from here.
-        if (d > screenTol) {
-          const desiredSpeed = maxSpeed * clamp((d - screenTol) / 45, 0, 1) // ease in near the line
-          sx = dx / d * desiredSpeed
-          sy = dy / d * desiredSpeed
+        const wx = a.x - a.perc.px, wy = a.y - a.perc.py  // agent relative to protector
+        const along = wx * ux + wy * uy                    // how far behind the protector
+        const perp = Math.abs(wx * uy - wy * ux)           // sideways offset from the safe ray
+        // Screened: behind the protector, and lined up closely enough that their
+        // body blocks your view. When true, don't seek at all — at any distance.
+        const screened = along > AGENT_RADIUS && perp < screenTol
+        if (!screened) {
+          const rP = Math.hypot(wx, wy) || 1               // your current distance from them
+          const keepR = Math.max(rP, AGENT_RADIUS * 2.5)   // keep it (never dive in)
+          const angA = Math.atan2(wy, wx)                  // your bearing around the protector
+          const angT = Math.atan2(uy, ux)                  // the safe bearing to reach
+          let dAng = angT - angA
+          while (dAng > Math.PI) dAng -= TAU
+          while (dAng < -Math.PI) dAng += TAU
+          // Aim only part-way around the circle so the pull is tangential (an
+          // arc), not a chord that would cut in through the protector.
+          const stepAng = angA + clamp(dAng, -0.7, 0.7)
+          const tx = a.perc.px + Math.cos(stepAng) * keepR
+          const ty = a.perc.py + Math.sin(stepAng) * keepR
+          const dx = tx - a.x, dy = ty - a.y
+          const d = Math.hypot(dx, dy)
+          if (d > 1e-3) {
+            const desiredSpeed = maxSpeed * clamp(d / 55, 0, 1) // ease in near the target
+            sx = dx / d * desiredSpeed
+            sy = dy / d * desiredSpeed
+          }
         }
       }
 
