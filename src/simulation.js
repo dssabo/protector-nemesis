@@ -77,6 +77,8 @@ export class Simulation {
       turnRate: lerp(40, 2.6, hf),           // rad/s — how fast you can change heading
       jitter: lerp(0, 1.0, hf),              // random wobble in your path
       lapseRate: lerp(0, 0.22, hf),          // per-second chance of a not-looking lapse
+      openSpace: lerp(0, 1.0, hf),           // drive to drift into roomy gaps
+      edgeCare: lerp(1.4, 3.2, hf),          // how firmly you keep off the field edges
     }
   }
 
@@ -204,10 +206,13 @@ export class Simulation {
     }
 
     // --- 2. Steering -------------------------------------------------------
-    const sepRadius = AGENT_RADIUS * 6.0   // "personal space" — kept wide so
-    const sepWeight = 2.6                   // people actively seek open ground
+    const sepRadius = AGENT_RADIUS * 6.0   // "personal space" — hard push-off zone
+    const sepWeight = 2.6
+    const openRadius = AGENT_RADIUS * 14   // wider "roominess" sensing zone
+    const openWeight = 0.9                  // gentle drift toward open ground
     const screenTol = AGENT_RADIUS * 2.4   // sideways slack that still counts as screened
-    const margin = 70                      // soft edge starts this far in
+    const margin = 95                      // soft edge starts this far in
+    const maxOrbit = Math.min(this.width, this.height) * 0.40 // don't orbit out to the walls
 
     for (const a of agents) {
       // Seek: the only goal is a clear SIGHTLINE — get the protector onto the
@@ -234,7 +239,10 @@ export class Simulation {
         const screened = along > AGENT_RADIUS && perp < screenTol
         if (!screened) {
           const rP = Math.hypot(wx, wy) || 1               // your current distance from them
-          const keepR = Math.max(rP, AGENT_RADIUS * 2.5)   // keep it (never dive in)
+          // Keep roughly your current distance (don't dive in) — but not so far
+          // out that you'd orbit into the walls; if you've drifted too far, reel
+          // the orbit back toward a comfortable radius.
+          const keepR = clamp(rP, AGENT_RADIUS * 2.5, maxOrbit)
           const angA = Math.atan2(wy, wx)                  // your bearing around the protector
           const angT = Math.atan2(uy, ux)                  // the safe bearing to reach
           let dAng = angT - angA
@@ -255,37 +263,50 @@ export class Simulation {
         }
       }
 
-      // Separation: keep out of each other's space and drift toward openings.
-      // This is what turns "stay screened" into "stay screened AND in the
-      // clear". It's switched off while an agent is having an attention lapse.
+      // Two ranges of crowd awareness, both switched off during an attention
+      // lapse. SEPARATION is the close-in "get out of my personal space" shove.
+      // OPEN-SPACE is a softer, wider pull toward roomier ground — a person
+      // keeps half an eye on where the space is so they've got room to move
+      // when they suddenly need to. Its strength rises with the human factor.
       let sepx = 0, sepy = 0
+      let openx = 0, openy = 0
       if (a.distract <= 0) {
         for (const b of agents) {
           if (b === a) continue
           const dx = a.x - b.x, dy = a.y - b.y
           const d = Math.hypot(dx, dy)
-          if (d > 0 && d < sepRadius) {
+          if (d <= 0) continue
+          if (d < sepRadius) {
             const w = (sepRadius - d) / sepRadius
             sepx += dx / d * w
             sepy += dy / d * w
           }
+          if (d < openRadius) {
+            const w = (openRadius - d) / openRadius
+            openx += dx / d * w
+            openy += dy / d * w
+          }
         }
         sepx *= maxSpeed * sepWeight
         sepy *= maxSpeed * sepWeight
+        openx *= maxSpeed * openWeight * t.openSpace
+        openy *= maxSpeed * openWeight * t.openSpace
       }
 
       // Soft field edge — no fence, people just ease back toward the middle.
+      // Care about it more as the human factor rises (and generally keep well
+      // clear so the crowd works the interior, not the boundary).
       let bx = 0, by = 0
       if (a.x < margin) bx += (margin - a.x) / margin
       if (a.x > this.width - margin) bx -= (a.x - (this.width - margin)) / margin
       if (a.y < margin) by += (margin - a.y) / margin
       if (a.y > this.height - margin) by -= (a.y - (this.height - margin)) / margin
-      bx *= maxSpeed * 1.4
-      by *= maxSpeed * 1.4
+      bx *= maxSpeed * t.edgeCare
+      by *= maxSpeed * t.edgeCare
 
       // Desired velocity = all urges combined, capped at top speed.
-      let dvx = sx + sepx + bx
-      let dvy = sy + sepy + by
+      let dvx = sx + sepx + openx + bx
+      let dvy = sy + sepy + openy + by
       const dv = Math.hypot(dvx, dvy)
       if (dv > maxSpeed) { dvx = dvx / dv * maxSpeed; dvy = dvy / dv * maxSpeed }
 
