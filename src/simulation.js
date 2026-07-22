@@ -14,12 +14,30 @@ const TAU = Math.PI * 2
 
 export const AGENT_RADIUS = 9
 
-// Distinct, friendly dot colors. They just help you tell people apart and
-// follow an individual by eye.
+// How far ahead people "read" a target's motion. Humans don't chase where you
+// ARE, they head for where you're GOING — so each person aims at the line as it
+// will be a fraction of a second from now, not as it is this instant.
+const LEAD_TIME = 0.4 // seconds of anticipation
+
+// Decorative dot colors — they carry NO meaning (protector/nemesis are secret
+// and shown only by the sightlines). They exist purely so you can tell
+// neighbours apart at a glance. There are only this many, so with a big crowd
+// they necessarily repeat; to actually follow one person, click them.
+// Chosen to spread across hue AND lightness so they stay distinguishable to
+// colour-blind eyes rather than relying on a red/green split.
 const COLORS = [
-  '#ef476f', '#ffd166', '#06d6a0', '#118ab2', '#f78c6b',
-  '#8338ec', '#3a86ff', '#fb5607', '#2ec4b6', '#e07be0',
-  '#84a98c', '#ff70a6',
+  '#264653', // dark slate
+  '#2a9d8f', // teal
+  '#e9c46a', // sand
+  '#f4a261', // apricot
+  '#e76f51', // coral
+  '#5c4d7d', // indigo
+  '#457b9d', // steel
+  '#e07be0', // orchid
+  '#8ab17d', // sage
+  '#b5838d', // mauve
+  '#3d5a80', // navy
+  '#ee9b00', // amber
 ]
 
 function rand(min, max) { return min + Math.random() * (max - min) }
@@ -123,14 +141,18 @@ export class Simulation {
   }
 
   // Refresh an agent's remembered view of where its protector & nemesis are,
-  // optionally with some misjudgement (noise) baked in.
+  // optionally with some misjudgement (noise) baked in. This also bakes in
+  // ANTICIPATION: rather than the target's current spot we take where it will
+  // be LEAD_TIME from now, projected from its current velocity. That's what
+  // lets people flow into position (and cut smooth arcs) instead of forever
+  // reacting to stale positions.
   refreshPerception(a, noise) {
     const p = this.agents[a.protector]
     const n = this.agents[a.nemesis]
-    a.perc.px = p.x + (noise ? gauss(noise) : 0)
-    a.perc.py = p.y + (noise ? gauss(noise) : 0)
-    a.perc.nx = n.x + (noise ? gauss(noise) : 0)
-    a.perc.ny = n.y + (noise ? gauss(noise) : 0)
+    a.perc.px = p.x + p.vx * LEAD_TIME + (noise ? gauss(noise) : 0)
+    a.perc.py = p.y + p.vy * LEAD_TIME + (noise ? gauss(noise) : 0)
+    a.perc.nx = n.x + n.vx * LEAD_TIME + (noise ? gauss(noise) : 0)
+    a.perc.ny = n.y + n.vy * LEAD_TIME + (noise ? gauss(noise) : 0)
   }
 
   // Whether an agent's sightlines should be drawn, given the global toggle.
@@ -163,8 +185,9 @@ export class Simulation {
     }
 
     // --- 2. Steering -------------------------------------------------------
-    const sepRadius = AGENT_RADIUS * 4.2   // "personal space"
-    const sepWeight = 1.7
+    const sepRadius = AGENT_RADIUS * 5.5   // "personal space" — kept wide so
+    const sepWeight = 2.4                   // people actively seek open ground
+    const screenTol = AGENT_RADIUS * 1.6   // "close enough" to the line to stop
     const margin = 70                      // soft edge starts this far in
 
     for (const a of agents) {
@@ -186,8 +209,13 @@ export class Simulation {
         const ty = a.perc.py + uy * tproj
         const dx = tx - a.x, dy = ty - a.y
         const d = Math.hypot(dx, dy)
-        if (d > 1e-3) {
-          const desiredSpeed = maxSpeed * clamp(d / 45, 0, 1) // ease in near the target
+        // Deadband: once you're within screenTol of the ideal line you're
+        // already screened, so stop steering toward it. This is what stops
+        // people from needlessly creeping in toward their protector — a person
+        // who's covered is content to hold position (or drift on open ground),
+        // and only the separation force nudges them around from here.
+        if (d > screenTol) {
+          const desiredSpeed = maxSpeed * clamp((d - screenTol) / 45, 0, 1) // ease in near the line
           sx = dx / d * desiredSpeed
           sy = dy / d * desiredSpeed
         }

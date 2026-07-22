@@ -110,34 +110,11 @@ export default function App() {
         </header>
 
         <div className="controls">
-          <label className="control">
-            <div className="control-row">
-              <span>Participants</span><span className="val">{count}</span>
-            </div>
-            <input type="range" min="3" max="80" step="1"
-              value={count} onChange={e => setCount(+e.target.value)} />
-          </label>
-
-          <label className="control">
-            <div className="control-row">
-              <span>Speed</span><span className="val">{speed}</span>
-            </div>
-            <input type="range" min="15" max="200" step="1"
-              value={speed} onChange={e => setSpeed(+e.target.value)} />
-          </label>
-
-          <label className="control">
-            <div className="control-row">
-              <span>Human factor</span><span className="val">{humanFactor}%</span>
-            </div>
-            <input type="range" min="0" max="100" step="1"
-              value={humanFactor} onChange={e => setHumanFactor(+e.target.value)} />
-            <div className="ends"><span>robotic</span><span>human</span></div>
-            <p className="hint">
-              Higher = slower reactions, misjudged positions, momentum, wobble,
-              and the occasional real collision.
-            </p>
-          </label>
+          <Control label="Participants" value={count} set={setCount} min={3} max={80} />
+          <Control label="Speed" value={speed} set={setSpeed} min={15} max={200} />
+          <Control label="Human factor" value={humanFactor} set={setHumanFactor}
+            min={0} max={100} suffix="%" ends={['robotic', 'human']}
+            hint="Higher = slower reactions, misjudged positions, momentum, wobble, and the occasional real collision." />
         </div>
 
         <div className="buttons">
@@ -167,29 +144,57 @@ export default function App() {
   )
 }
 
+// A labelled slider with − / + steppers, so you can either drag or nudge the
+// value by one. The steppers clamp to [min, max].
+function Control({ label, value, set, min, max, suffix = '', ends, hint }) {
+  const step = (delta) => set(Math.max(min, Math.min(max, value + delta)))
+  return (
+    <div className="control">
+      <div className="control-row">
+        <span>{label}</span><span className="val">{value}{suffix}</span>
+      </div>
+      <div className="slider-row">
+        <button type="button" className="step" onClick={() => step(-1)}
+          aria-label={`decrease ${label}`}>−</button>
+        <input type="range" min={min} max={max} step="1"
+          value={value} onChange={e => set(+e.target.value)} />
+        <button type="button" className="step" onClick={() => step(1)}
+          aria-label={`increase ${label}`}>+</button>
+      </div>
+      {ends && <div className="ends"><span>{ends[0]}</span><span>{ends[1]}</span></div>}
+      {hint && <p className="hint">{hint}</p>}
+    </div>
+  )
+}
+
 // ---- Rendering -------------------------------------------------------------
+
+const PROT_LINE = '#2f90d8' // protector sightline — blue
+const NEM_LINE = '#ef7d18'  // nemesis sightline — orange
 
 function draw(canvas, sim, showLines) {
   const ctx = canvas.getContext('2d')
   const w = sim.width, h = sim.height
 
-  // Field
+  // Field — plain white for maximum contrast with the dots and sightlines.
   ctx.clearRect(0, 0, w, h)
-  ctx.fillStyle = '#7fb069'
+  ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, w, h)
-  drawGrass(ctx, w, h)
 
   const agents = sim.agents
 
-  // Sightlines first, so dots sit on top of them.
+  // Sightlines first, so dots sit on top of them. Blue (protector) and orange
+  // (nemesis) are a colour-blind-safe pair — distinct in hue AND lightness —
+  // and drawn thick with round caps so they read clearly.
+  ctx.lineWidth = 3
+  ctx.lineCap = 'round'
   for (const a of agents) {
     if (!sim.linesVisible(a, showLines)) continue
     const p = agents[a.protector]
     const n = agents[a.nemesis]
-    ctx.lineWidth = 1.5
-    ctx.strokeStyle = 'rgba(20, 90, 40, 0.55)'
+    ctx.strokeStyle = PROT_LINE
     line(ctx, a.x, a.y, p.x, p.y)
-    ctx.strokeStyle = 'rgba(150, 20, 30, 0.5)'
+    ctx.strokeStyle = NEM_LINE
     line(ctx, a.x, a.y, n.x, n.y)
   }
 
@@ -217,12 +222,13 @@ function draw(canvas, sim, showLines) {
     ctx.strokeStyle = 'rgba(0,0,0,0.28)'
     ctx.stroke()
 
-    // ring on anyone whose sightlines are individually shown
+    // ring on anyone whose sightlines are individually shown — dark so it
+    // stands out against the white field
     if (sim.linesVisible(a, showLines)) {
       ctx.beginPath()
       ctx.arc(a.x, a.y, r + 4, 0, Math.PI * 2)
-      ctx.lineWidth = 2
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+      ctx.lineWidth = 2.5
+      ctx.strokeStyle = 'rgba(20,24,30,0.9)'
       ctx.stroke()
     }
   }
@@ -233,27 +239,4 @@ function line(ctx, x1, y1, x2, y2) {
   ctx.moveTo(x1, y1)
   ctx.lineTo(x2, y2)
   ctx.stroke()
-}
-
-// A faint scattering of grass tufts so the "field" reads as a field. Drawn
-// deterministically from a fixed pattern so it doesn't flicker frame to frame.
-let grassPattern = null
-function drawGrass(ctx, w, h) {
-  if (!grassPattern || grassPattern.w !== w || grassPattern.h !== h) {
-    const pts = []
-    // simple deterministic hash so tufts stay put between frames
-    let seed = 1234567
-    const next = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
-    const n = Math.round((w * h) / 5000)
-    for (let i = 0; i < n; i++) pts.push([next() * w, next() * h, next()])
-    grassPattern = { w, h, pts }
-  }
-  ctx.strokeStyle = 'rgba(60, 120, 50, 0.35)'
-  ctx.lineWidth = 1
-  for (const [x, y, r] of grassPattern.pts) {
-    ctx.beginPath()
-    ctx.moveTo(x, y)
-    ctx.lineTo(x + (r - 0.5) * 4, y - 3 - r * 2)
-    ctx.stroke()
-  }
 }
